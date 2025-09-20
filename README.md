@@ -23,7 +23,6 @@ d right
 
 esc exit
 
-very wip
 
 
 todo:
