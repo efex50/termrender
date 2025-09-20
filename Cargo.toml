@@ -1,0 +1,17 @@
+[package]
+name = "termrender"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.29.0"
+
+
+
+[profile.minimal]
+inherits = "release"     # Start from release settings
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
