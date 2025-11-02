@@ -4,7 +4,7 @@ use std::ops;
 
 
 
-#[derive(Debug, Copy, Clone, PartialEq,Hash,Eq)]
+#[derive(Debug, Copy, Clone, PartialEq,Hash,Eq,Default)]
 pub struct Vec2{
     pub x:i32,
     pub y:i32,
@@ -18,6 +18,11 @@ impl Vec2 {
 impl From<Vec2> for (i32,i32) {
     fn from(value: Vec2) -> Self {
         (value.x,value.y)
+    }
+}
+impl From<Vec2> for (u16,u16) {
+    fn from(value: Vec2) -> Self {
+        (value.x as u16,value.y as u16)
     }
 }
 impl From<(u16,u16)> for Vec2{
@@ -60,3 +65,4 @@ impl ops::SubAssign for Vec2 {
         self.y -= rhs.y;
     }
 }
+
