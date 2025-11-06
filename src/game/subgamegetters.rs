@@ -21,7 +21,6 @@ macro_rules! ptr_clone {
 
 /// unsafe getters
 impl<'a> Game<'a> {
-
     pub fn get_input(&self) -> &Input{
         let g= ptr_clone!(self,ptr);
         &g.input

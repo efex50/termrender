@@ -1,18 +1,21 @@
 #[allow(non_snake_case)]
+
 #[allow(dead_code)]
 use std::{collections::HashSet, hash::{Hash, Hasher}};
 use paste::paste;
 
-use crate::{math::Vec2, print::GameTexture};
+use crate::{math::Vec2, physics::AABB, print::GameTexture};
 
 #[derive(Debug,PartialEq, Eq)]
+#[repr(u8)]
 pub enum Components{
     Player,
     BulletPlayer,
     Enemy,
     BulletEnemy,
     Wall,
-    Object(String),
+    AreaSquare,
+    Custom(String),
 }
 
 
@@ -61,10 +64,11 @@ macro_rules! attributes {
 
             paste! {
                 $(
+                    #[allow(non_snake_case)]
                     pub fn [<insert_ $name>](&mut self, val: $ty) {
                         self.set.replace(AttributeAny::$name($name(val)));
                     }
-
+                    #[allow(non_snake_case)]
                     pub fn [<get_ $name>](&self) -> Option<&$ty> {
                         if let Some(AttributeAny::$name(inner)) =
                             self.set.get(&AttributeAny::$name($name(Default::default())))
@@ -74,6 +78,7 @@ macro_rules! attributes {
                             None
                         }
                     }
+                    #[allow(non_snake_case)]
                     pub fn [<check_ $name>](&self) -> bool {
                         if let Some(AttributeAny::$name(_)) =
                             self.set.get(&AttributeAny::$name($name(Default::default())))
@@ -97,13 +102,14 @@ attributes!(
     Velocity:Vec2,
     Acc:Vec2,
     Mass:i32,
-    Texture:GameTexture
+    Texture:GameTexture,
+    Col:AABB
 );
 #[test]
 fn att_test(){
     let mut m = Attributes::new();
     m.insert_Mass(100);
     m.insert_Mass(30);
-    let mass = m.get_Mass().unwrap();
+    let _mass = m.get_Mass().unwrap();
     println!("{:?}",m);
 }

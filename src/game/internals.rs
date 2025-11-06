@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{any::Any, borrow::Borrow, time::Duration};
 
 use crate::{Ret, game::{Game, get_logger}};
 
@@ -9,15 +9,10 @@ use crate::{Ret, game::{Game, get_logger}};
 
 // internal functions of Game
 impl<'a> Game<'a>{
-    pub fn log(&self,l:String){
-        let logs = get_logger();
-        let mut logs = logs.lock().unwrap();
-        logs.push(l);
-    }
-    pub fn log_arr(&mut self,mut l:Vec<String>){
-        let logs = get_logger();
-        let mut logs = logs.lock().unwrap();
-        logs.append(&mut l);
+    pub fn set_log_path(&self,path:Option<String>){
+        let l = get_logger();
+        let mut log = l.lock().unwrap();
+        log.set_path(path);
     }
 
     /// 0 means maximum
@@ -45,9 +40,18 @@ impl<'a> Game<'a>{
     }
     pub(super) fn print_title(&mut self,extra:Option<String>) -> Ret{
         let title = format!("\x1b]0;{}{}\x07",self.title,extra.unwrap_or("".to_string()));
-        self.screen.queque(title)?;
+        self.screen.print_raw(title)?;
         Ok(())
         
+    }
+
+    /// send an any signal
+    /// 
+    /// 
+    pub fn send_signal<S:Borrow<String>>(&self,hint:S ,to: S,msg: Box<dyn Any + Send>){
+        let (from,to) = (hint.borrow(),to.borrow());
+        let sys = self.get_systems_mut();
+        sys.send_signal(from, to, msg);
     }
 
 }

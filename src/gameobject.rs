@@ -1,8 +1,6 @@
-use std::{fmt::Debug, io::Stdout};
+use std::fmt::Debug;
 
-use crossterm::{cursor, queue, style::Print, QueueableCommand};
-
-use crate::{Ret, RetType, components::{Attribute, Attributes, Components}, game::screen::Screen, math::Vec2, print::TermPrint};
+use crate::{Ret, RetType, components::{Attribute, Attributes, Components}, game::screen::Screen, math::Vec2};
 
 
 pub struct ObjectBuilder{
@@ -13,24 +11,23 @@ impl ObjectBuilder {
     pub fn new() -> Self{
         Self { attributes: Attributes::new(), components: Vec::new() }
     }
-    pub fn with_attribute(self,att:Attribute) -> Self{
-        let mut s = Self::from(self);
+    pub fn with_attribute(mut self,att:Attribute) -> Self{
         match att{
-            Attribute::Location(vec2)         => s.attributes.insert_Location(vec2),
-            Attribute::Velocity(vec2)         => s.attributes.insert_Velocity(vec2),
-            Attribute::Acc(vec2)              => s.attributes.insert_Acc(vec2),
-            Attribute::Mass(a)                 => s.attributes.insert_Mass(a),
-            Attribute::Texture(a)  => s.attributes.insert_Texture(a),
+            Attribute::Location(vec2)       => self.attributes.insert_Location(vec2),
+            Attribute::Velocity(vec2)       => self.attributes.insert_Velocity(vec2),
+            Attribute::Acc(vec2)        => self.attributes.insert_Acc(vec2),
+            Attribute::Mass(a)       => self.attributes.insert_Mass(a),
+            Attribute::Texture(a)       => self.attributes.insert_Texture(a),
+            Attribute::Col(aabb)        => self.attributes.insert_Col(aabb),
         };
-        s
+        self
         
     }
-    pub fn with_component(self,comp:Components) -> Self {
-        let mut s = Self::from(self);
-        if !s.components.contains(&comp){
-            s.components.push(comp);
+    pub fn with_component(mut self,comp:Components) -> Self {
+        if !self.components.contains(&comp){
+            self.components.push(comp);
         }
-        s
+        self
     }
     pub fn build(self) -> ObjectHeader{
         ObjectHeader{

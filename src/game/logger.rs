@@ -2,7 +2,7 @@ use std::{sync::{Arc, Mutex}};
 
 use once_cell::sync::Lazy;
 
-use crate::{GAME_STARTED, print::{RGB, TermPrint}};
+use crate::{GAME_STARTED, print::{GColor, RGB, TermPrint}};
 
 
 
@@ -10,6 +10,7 @@ use crate::{GAME_STARTED, print::{RGB, TermPrint}};
 /// Debug Warn Err Debug
 macro_rules! LOG {
     ($level:ident, $($msg:tt)*) => {{
+        let line = line!{};
         // Get the function path using type_name_of_val
         let func_name = {
             // Use a dummy fn pointer to get the current function
@@ -19,15 +20,8 @@ macro_rules! LOG {
             // Try to trim trailing "::f" to make output cleaner
             full.trim_end_matches("::f")
         };
-        let level = LogLevel::from_string(stringify!($level));
-        log(level,func_name,format!($($msg)*).as_str());
-        /*
-        eprintln!("{}:{}:{}",
-            stringify!($level),
-            func_name,
-            format!($($msg)*)
-        );
-        */
+        let level = $crate::game::logger::LogLevel::from_string(stringify!($level));
+        $crate::game::logger::log(level,func_name,format!($($msg)*).as_str(),line);
     }};
 }
 
@@ -64,50 +58,71 @@ pub enum LogType<'a>{
 }
 
 
+pub struct Logger{
+    pub logs:Vec<String>,
+    pub log_path:Option<String>,
+}
+impl Logger {
+    pub fn new(path:Option<String>) -> Self {
+        let m = Vec::new();
 
-pub type Logger = Arc<Mutex<Vec<String>>>;
-pub static GLOBAL_LOGGER: Lazy<Logger> = Lazy::new(|| {
-    let m = Vec::new();
-    Arc::new(Mutex::new(m))
-});
+        Logger { logs: m, log_path: path }
+    }
+    pub fn log<S:Into<String>>(&mut self,level:LogType,path:S,msg:S,line:u32){
+        let msg = msg.into();
+        let path = path.into();
+        let l = self.logs.clone();
+        let timestamp = GAME_STARTED.elapsed().as_millis();
+        let logmsg = {
+            match level {
+                LogType::Level(l) => 
+                    match l {
+                        LogLevel::Info => {
+                            // light blue
+                            // old from((100,180,255))
+                            TermPrint::from((l.as_string(),GColor::Black,GColor::Cyan))
+                        },
+                        LogLevel::Warn => {
+                            // yellow
+                            // old from((255,210,90))
+                            TermPrint::from((l.as_string(),GColor::Black,GColor::Yellow))
+                        },
+                        LogLevel::Err => {
+                            // red
+                            // old from((255,85,85))
+                            TermPrint::from((l.as_string(),GColor::Black,GColor::Red))
+                        },
+                        LogLevel::Debug => {
+                            // green
+                            // from((80,200,120))
+                            TermPrint::from((l.as_string(),GColor::Black,GColor::Green))
+                        },
+                    }
+                ,
+                LogType::Str(s) => TermPrint::from((s,GColor::Black,GColor::DarkGrey)),
+            }
+        };
+        let msg = format!("{}:{}\x1b[0m:{}:{line}:{}",timestamp,logmsg,path,msg);
+        self.logs.push(msg);
+    }
 
-pub fn log<S:Into<String>>(level:LogType,path:S,msg:S){
-    let msg = msg.into();
-    let path = path.into();
-    let l = get_logger();
-    let timestamp = GAME_STARTED.elapsed().as_millis();
-    let logmsg = {
-        match level {
-            LogType::Level(l) => 
-                match l {
-                    LogLevel::Info => {
-                        // light blue
-                        TermPrint::from((l.as_string(),(),RGB::from((100,180,255))))
-                    },
-                    LogLevel::Warn => {
-                        // yellow
-                        TermPrint::from((l.as_string(),(),RGB::from((255,210,90))))
-                    },
-                    LogLevel::Err => {
-                        // red
-                        TermPrint::from((l.as_string(),(),RGB::from((255,85,85))))
-                    },
-                    LogLevel::Debug => {
-                        // green
-                        TermPrint::from((l.as_string(),(),RGB::from((80,200,120))))
-                    },
-                }
-            ,
-            LogType::Str(s) => TermPrint::from((s,(),RGB::from((120, 120, 120)))),
-        }
-    };
-    let mut log = l.lock().unwrap();
-    let msg = format!("{}:{}\x1b[0m:{}:{}",timestamp,logmsg,path,msg);
-    log.push(msg);
+    pub fn set_path(&mut self,path:Option<String>){
+        self.log_path = path;
+    }
 
 }
+pub static GLOBAL_LOGGER: Lazy<Arc<Mutex<Logger>>> = Lazy::new(|| {
+    Arc::new(Mutex::new(Logger::new(None)))
+});
 
-pub fn get_logger() -> Logger{
+pub fn log<S:Into<String>>(level:LogType,path:S,msg:S,line:u32){
+    
+    let l = get_logger();
+    let mut l = l.lock().unwrap();
+    l.log(level, path, msg, line);
+}
+
+pub fn get_logger() -> Arc<Mutex<Logger>>{
     Arc::clone(&GLOBAL_LOGGER)
 }
 
@@ -116,7 +131,7 @@ pub fn get_logger() -> Logger{
 
 #[cfg(test)]
 mod log_test{
-    use crate::game::logger::{LogLevel, get_logger, log};
+    use crate::game::logger::{LogLevel, get_logger};
 
     /*
     macro_rules! log {
@@ -146,13 +161,14 @@ mod log_test{
         let _l = LogLevel::Debug;
         let str = stringify!(l);
         println!("{}",str);
-        LOG!(warn,"asafas" );
+        LOG!(warn,"asafas");
     }
     #[test]
     fn macro_test(){
         LOG!(Warn,"WARNED");
-        let g = get_logger();
-        let g = g.lock().unwrap();
+        let binding = get_logger();
+        let g = binding.lock().unwrap();
+        let g = &g.logs;
         for x in g.iter(){
            println!("{x}")
         }

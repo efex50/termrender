@@ -1,5 +1,5 @@
-use std::{backtrace::Backtrace, collections::{HashSet}, io::{stdout, Write}, sync::{Arc, Mutex}, time::{Duration, Instant}};
-use crate::{GAME_STARTED, Ret, RetTick, RetType, TermPrint, game::{input::{Input, Keys}, logger::{ get_logger}, screen::Screen, systems::Systems}, gameobject::ObjectHeader, math::Vec2, print::RGB};
+use std::{backtrace::Backtrace, collections::HashSet, fmt::format, fs::OpenOptions, io::{Write, stdout}, sync::{Arc, Mutex}, time::{Duration, Instant}};
+use crate::{GAME_STARTED, Ret, RetTick, RetType, game::{input::{Input, Keys}, logger::get_logger, screen::Screen, systems::Systems}, gameobject::ObjectHeader, math::Vec2, prelude::Components, print::GColor};
 
 
 pub mod systems;
@@ -28,6 +28,9 @@ impl Timing {
     pub fn get_delta_physics(&self) -> Duration{
         self._last_physics_frame.elapsed()
     }
+    pub fn get_delta_process(&self) -> Duration{
+        self._last_process_frame.elapsed()
+    }
 }
 
 
@@ -45,7 +48,67 @@ impl World {
         }else {
             None
         }
-    }    
+    }
+    pub fn get_with_component(&mut self,comp:Components) -> Vec<&mut ObjectHeader>{
+        let mut v = Vec::new();
+        for x in self.objects.iter_mut(){
+            if x.components.contains(&comp){
+                unsafe {
+                    v.push(
+                        (x as *mut ObjectHeader).as_mut().unwrap()
+                    );
+                };
+            }
+        }
+        v
+    }
+    pub fn get_with_components(&mut self,comp:Vec<Components>) -> Vec<&mut ObjectHeader>{
+        let mut v = Vec::new();
+        for obj in self.objects.iter_mut(){
+            let has_all = {
+                let mut complete = false;
+                'main:for x in &comp{
+                    for y in &obj.components{
+                        if x == y{
+                            complete = true;
+                            continue;
+                        }
+                        complete = false;
+                        break 'main;
+                    }
+                }
+                complete
+            };
+            if has_all{
+                unsafe {
+                    v.push(
+                        (obj as *mut ObjectHeader).as_mut().unwrap()
+                    );
+                };
+            }
+        }
+        v
+    }
+    pub fn query_comp(&mut self,comp:Components) -> Option<&mut ObjectHeader>{
+        for x in self.objects.iter_mut(){
+            if x.components.contains(&comp){
+                let p = unsafe{(x as *mut ObjectHeader).as_mut().unwrap()};
+                return Some(p);
+            }
+        };
+        None
+    }
+    pub fn insert_object_head(&mut self,header: ObjectHeader) -> RetType<usize> {
+        let mut o = ObjectHeader::from(header);
+        let id = self.objects.len();
+        o.id = id;
+        if let Some(p) = o.attributes.get_Location(){
+            o.previus = *p;
+        }
+        self.objects.push(o);
+        Ok(id)
+    }
+
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -56,7 +119,7 @@ pub enum Flags{
 
 pub struct Game<'a>{
     pub title: String,
-    panic_logs: logger::Logger,
+    panic_logs: Arc<Mutex<Vec<String>>>,
     flags: HashSet<Flags>,
     is_started: bool,
 
@@ -87,7 +150,7 @@ impl<'a> Game<'a> {
 
         let screen = Vec2::from(crossterm::terminal::size().unwrap());
         let terminal = Screen {
-            bg:(RGB { r: 50, g: 100, b: 150 ,res:false},RGB::from(true),' '),
+            bg:(GColor::RGB(50, 100, 150),GColor::White,' '),
             out:stdout(),
             screen,
             posy:0
@@ -115,8 +178,11 @@ impl<'a> Game<'a> {
             panic_logs
         }
     }   
-    pub fn update_delta(&mut self){
+    pub fn update_physics_delta(&mut self){
         self.timing._last_physics_frame = Instant::now();
+    }
+    pub fn update_process_delta(&mut self){
+        self.timing._last_process_frame = Instant::now();
     }
     pub fn print(&mut self,text:String) -> Ret{
         self.screen.cursor_move(screen::CursorMoveTo::Pos((0, self.screen.posy)))?;
@@ -130,24 +196,12 @@ impl<'a> Game<'a> {
         self.screen.flush()?;
         Ok(())
     }
-    pub fn insert_object_head(&mut self,header: ObjectHeader) -> RetType<usize> {
-        let mut o = ObjectHeader::from(header);
-        let id = self.world.objects.len();
-        o.id = id;
-        if let Some(p) = o.attributes.get_Location(){
-            o.previus = *p;
-        }
-        self.world.objects.push(o);
-        Ok(id)
-    }
 
     fn tick_once(&mut self) -> RetTick{
         self.screen.clear_bg()?;
 
-        for (name,sys) in &mut self.get_systems_mut().sys{
-            if !sys.fun._setup(name,self.get_self_mut())?{
-                return Ok(false);
-            }
+        for (_,sys) in &mut self.get_systems_mut().sys{
+            sys.activate(self.get_self_mut())?;
         }
         self.rerender_all()?;
         Ok(true)
@@ -184,18 +238,44 @@ impl<'a> Game<'a> {
         if self.flags.contains(&Flags::Debug) {
             let fps = 1.0 / self.timing._last_physics_frame.elapsed().as_secs_f32();
             self.print_title(Some(format!(" fps:{:.1}  press {:?} screen {:?}",fps,self.input.pressed_keys,self.screen.screen)))?;
-
         }
+        // handle the signals
+        let s = self.get_systems_mut();
+        let g = self.get_self_mut();
+        s.deliver_signals(g)?;
         Ok(true)
+    }
+    
+    fn tick(&mut self) -> RetTick{
+        let mut res;
+        // code that runs before any ticl
+        res = self.tick_enter()?;
+        if !res{return Ok(res)}
+
+        let g = self.get_self_mut();
+        for (name,sys) in &mut self.get_systems_mut().sys{
+            if sys.is_active(){
+                
+                if !sys.is_init(){
+                    sys.activate(g)?;
+                }
+                let delta_phy = self.timing._last_physics_frame.elapsed();
+                let delta_proc = self.timing._last_process_frame.elapsed();
+                res = 
+                sys.fun._physics_loop(delta_phy,name,g)? &
+                sys.fun._process_loop(delta_proc,name,g)?;
+            }
+            if !res {return Ok(res);}
+        }
+     
+        // code that runs after any tick
+        self.tick_exit()
     }
     fn tick_exit(&mut self) -> RetTick{
         if self.input.pressed_keys.contains(&Keys::Esc){
             return Ok(false);
         }
-        let mut bg = TermPrint::from((self.screen.bg.2.to_string().as_str(),self.screen.bg.0,self.screen.bg.1));
-        bg.text = "".to_string();
-        
-        
+            
         for x in &mut self.get_wolrd_mut().objects{
             if x.attributes.check_Texture() && x.attributes.check_Location() && x.should_render(){
                 let mut scr = self.get_screen_mut();
@@ -207,25 +287,9 @@ impl<'a> Game<'a> {
         }
         self.screen.out.flush()?;
         self.input.just_pressed_keys.clear();
-        self.update_delta();
+        self.update_physics_delta();
+        self.update_process_delta();
         Ok(true)
-    }
-    
-    fn tick(&mut self) -> RetTick{
-        let mut res;
-        // code that runs before any ticl
-        res = self.tick_enter()?;
-        if !res{return Ok(res)}
-
-        
-        for (name,sys) in &mut self.get_systems_mut().sys{
-            res = sys.fun._physics_loop(name,self.get_self_mut())? & sys.fun._process_loop(name,self.get_self_mut())?;
-
-            if !res {return Ok(res);}
-        }
-     
-        // code that runs after any tick
-        self.tick_exit()
     }
 
     pub fn main_loop(&mut self) -> Ret{
@@ -281,10 +345,33 @@ impl<'a> Drop for Game<'a> {
             println!("game exited")
         }
         println!("start log");
-        let logs = get_logger();
-        let logs = logs.lock().unwrap();
+        let log = get_logger();
+        let logs = log.lock().unwrap();
+        if let Some(path) = &logs.log_path {
+            let mut tries = 0;
+            loop {
+                let num ={if tries == 0 {"".to_string()} else {format!(".{}",tries)}};
+                let pathname = format!("{}{}.log",path,num);
+                let p = std::path::Path::new(&pathname);
+                if p.exists(){
+                    tries += 1;
+                    continue;
+                }else {
+                    let mut file = OpenOptions::new()
+                        .create(true)   // create if not exists
+                        .append(true)   // open for appending
+                        .open(p).unwrap(); 
 
-        for x in logs.iter(){
+                    for x in logs.logs.iter(){
+                        file.write_all(x.as_bytes()).unwrap();
+                        file.write(&[b'\n']).unwrap();
+                    }
+                    break;
+                }
+            }
+        }
+
+        for x in logs.logs.iter(){
             println!("{}",x)
         }
         println!("end log")

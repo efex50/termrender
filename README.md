@@ -1,17 +1,16 @@
 termrender 
 a wip terminal rendering game engine
 
-usage:
+running examples:
 
-`termrender 1`
-
-`termrender 2`
-
+cargo r --example snake
 
 
 keys:
 
 f4 debug
+
+f5 rerender
 
 w up
 

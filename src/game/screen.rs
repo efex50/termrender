@@ -1,10 +1,10 @@
-use std::io::Write;
+use std::{borrow::Borrow, fmt::Display, io::Write};
 
 #[cfg(not(windows))]
 use crossterm::event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
 use crossterm::{QueueableCommand, cursor::{self, MoveDown, MoveLeft, MoveRight, MoveTo, MoveUp}, queue, style::{Color, Print, SetBackgroundColor, SetForegroundColor}, terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 
-use crate::{math::Vec2, prelude::ObjectHeader, print::{TermPrint, RGB}, Ret};
+use crate::{Ret, RetType, math::Vec2, prelude::ObjectHeader, print::{GColor, TermPrint}};
 
 pub enum CursorMoveTo{
     Up(u16),
@@ -27,17 +27,11 @@ pub struct Screen {
     pub out: std::io::Stdout,
     pub posy: u16,
     pub screen: Vec2,
-    pub bg: (RGB, RGB, char),
+    pub bg: (GColor, GColor, char),
 }
 impl Screen {
     pub fn cursor_queque_obj(&mut self,p:&mut ObjectHeader) -> Ret {
         p.print(self)?;
-        queue!(
-            self.out,
-            Clear(ClearType::All),
-            SetBackgroundColor(Color::from(self.bg.0)),
-            SetForegroundColor(Color::from(self.bg.1)),
-        )?;
         Ok(())
     }
     pub fn cursor_queque<T>(&mut self,print:&T) -> Ret where T:core::fmt::Display{
@@ -94,10 +88,24 @@ impl Screen {
 
     }
 
-    pub fn queque<S:Into<String>>(&mut self,str:S) -> Ret{
-        let str = str.into();
-        self.out.queue(Print(str))?;
+    pub fn queue<T:Borrow<TermPrint>>(&mut self,s:T) -> Ret{
+        let mut s = s.borrow().clone();
+        if s.background == GColor::Default{
+            s.background = self.bg.0;
+        }
+        if s.fore == GColor::Default{
+            s.fore = self.bg.1;
+        }
+        self.out.queue(Print(s))?;
         Ok(())
+    }
+    pub fn print_raw<S:Into<String>>(&mut self,str:S) -> Ret{
+        let str = str.into();
+        print!("{}",str);
+        Ok(())
+    }
+    pub fn get_size() -> RetType<Vec2>{
+        Ok(Vec2::from(crossterm::terminal::size()?))
     }
 
 
