@@ -1,4 +1,4 @@
-use std::{any::Any, borrow::Borrow, time::Duration};
+use std::{any::Any, borrow::Borrow};
 
 use crate::{Ret, game::{Game, get_logger}};
 
@@ -23,26 +23,16 @@ impl<'a> Game<'a>{
         self.timing.physics_fps = fps;
         Ok(())
     }
-    pub fn should_render(&self) -> bool{
-        let frame_time = Duration::from_secs_f32(1.0 / self.timing.physics_fps);
-        self.timing._last_physics_frame.elapsed() >= frame_time 
-    }
     pub fn setup(&mut self) -> Ret{
         self.screen.init_term()?;
 
-        self.print_title(None)?;
+        self.screen.print_title(None)?;
 
         Ok(())
     }
     pub fn exit(&mut self) -> Ret{
         self.screen.deinit_term()?;
         Ok(())
-    }
-    pub(super) fn print_title(&mut self,extra:Option<String>) -> Ret{
-        let title = format!("\x1b]0;{}{}\x07",self.title,extra.unwrap_or("".to_string()));
-        self.screen.print_raw(title)?;
-        Ok(())
-        
     }
 
     /// send an any signal

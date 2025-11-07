@@ -90,6 +90,16 @@ impl From<(i32,i32)> for Vec2{
         Self { x: value.0, y:value.1 }
     }
 }
+impl From<u16> for Vec2{
+    fn from(value: u16) -> Self {
+        Self { x: value as i32, y:value as i32 }
+    }
+}
+impl From<i32> for Vec2{
+    fn from(value: i32) -> Self {
+        Self { x: value, y:value }
+    }
+}
 impl ops::Add for Vec2 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {

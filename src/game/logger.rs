@@ -2,7 +2,7 @@ use std::{sync::{Arc, Mutex}};
 
 use once_cell::sync::Lazy;
 
-use crate::{GAME_STARTED, print::{GColor, RGB, TermPrint}};
+use crate::{GAME_STARTED, print::{GColor, TermPrint}};
 
 
 
@@ -30,7 +30,7 @@ macro_rules! LOG {
 pub enum LogLevel{
     Info,
     Warn,
-    Err,
+    Error,
     Debug,
 }
 impl LogLevel {
@@ -38,7 +38,7 @@ impl LogLevel {
         match self {
             LogLevel::Info =>   "Info",
             LogLevel::Warn =>   "Warn",
-            LogLevel::Err =>    "Err",
+            LogLevel::Error =>  "Error",
             LogLevel::Debug =>  "Debug",
         }
     }
@@ -46,7 +46,7 @@ impl LogLevel {
         match str {
             "Info"  => LogType::Level(Self::Info),
             "Warn"  => LogType::Level(Self::Warn),
-            "Err"   => LogType::Level(Self::Err),
+            "Error"   => LogType::Level(Self::Error),
             "Debug" => LogType::Level(Self::Debug),
             _ => LogType::Str(str)
         }
@@ -71,7 +71,6 @@ impl Logger {
     pub fn log<S:Into<String>>(&mut self,level:LogType,path:S,msg:S,line:u32){
         let msg = msg.into();
         let path = path.into();
-        let l = self.logs.clone();
         let timestamp = GAME_STARTED.elapsed().as_millis();
         let logmsg = {
             match level {
@@ -80,26 +79,26 @@ impl Logger {
                         LogLevel::Info => {
                             // light blue
                             // old from((100,180,255))
-                            TermPrint::from((l.as_string(),GColor::Black,GColor::Cyan))
+                            TermPrint::from((l.as_string(),(),GColor::Cyan))
                         },
                         LogLevel::Warn => {
                             // yellow
                             // old from((255,210,90))
-                            TermPrint::from((l.as_string(),GColor::Black,GColor::Yellow))
+                            TermPrint::from((l.as_string(),(),GColor::Yellow))
                         },
-                        LogLevel::Err => {
+                        LogLevel::Error => {
                             // red
                             // old from((255,85,85))
-                            TermPrint::from((l.as_string(),GColor::Black,GColor::Red))
+                            TermPrint::from((l.as_string(),(),GColor::Red))
                         },
                         LogLevel::Debug => {
                             // green
                             // from((80,200,120))
-                            TermPrint::from((l.as_string(),GColor::Black,GColor::Green))
+                            TermPrint::from((l.as_string(),(),GColor::Green))
                         },
                     }
                 ,
-                LogType::Str(s) => TermPrint::from((s,GColor::Black,GColor::DarkGrey)),
+                LogType::Str(s) => TermPrint::from((s,(),GColor::DarkGrey)),
             }
         };
         let msg = format!("{}:{}\x1b[0m:{}:{line}:{}",timestamp,logmsg,path,msg);

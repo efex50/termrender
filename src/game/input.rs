@@ -12,7 +12,7 @@ impl Input {
         Self { pressed_keys: HashSet::new(), just_pressed_keys: HashSet::new(), poll_timeout: timeout }
     }
     pub(crate) fn poll_keys(&mut self) -> Ret{
-        while event::poll(Duration::from_millis(1))? {
+        while event::poll(self.poll_timeout)? {
             if let Event::Key(k) = event::read()? {
                 use crossterm::event::KeyEventKind::*;
                 let code = Keys::from(k.code);

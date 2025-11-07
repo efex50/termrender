@@ -15,6 +15,8 @@ pub enum Components{
     BulletEnemy,
     Wall,
     AreaSquare,
+    /// for dropped objects that needs reallocation
+    Destroyed,
     Custom(String),
 }
 
@@ -65,7 +67,7 @@ macro_rules! attributes {
             paste! {
                 $(
                     #[allow(non_snake_case)]
-                    pub fn [<insert_ $name>](&mut self, val: $ty) {
+                    pub fn [<set_ $name>](&mut self, val: $ty) {
                         self.set.replace(AttributeAny::$name($name(val)));
                     }
                     #[allow(non_snake_case)]
@@ -108,8 +110,8 @@ attributes!(
 #[test]
 fn att_test(){
     let mut m = Attributes::new();
-    m.insert_Mass(100);
-    m.insert_Mass(30);
+    m.set_Mass(100);
+    m.set_Mass(30);
     let _mass = m.get_Mass().unwrap();
     println!("{:?}",m);
 }

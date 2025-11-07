@@ -1,8 +1,8 @@
-use std::{borrow::Borrow, fmt::Display, io::Write};
+use std::{borrow::Borrow, io::Write};
 
 #[cfg(not(windows))]
 use crossterm::event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
-use crossterm::{QueueableCommand, cursor::{self, MoveDown, MoveLeft, MoveRight, MoveTo, MoveUp}, queue, style::{Color, Print, SetBackgroundColor, SetForegroundColor}, terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
+use crossterm::{QueueableCommand, cursor::{self, MoveDown, MoveLeft, MoveRight, MoveTo, MoveUp},style::{Color, Print, SetBackgroundColor, SetForegroundColor}, terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 
 use crate::{Ret, RetType, math::Vec2, prelude::ObjectHeader, print::{GColor, TermPrint}};
 
@@ -28,6 +28,7 @@ pub struct Screen {
     pub posy: u16,
     pub screen: Vec2,
     pub bg: (GColor, GColor, char),
+    pub(crate)  title :String
 }
 impl Screen {
     pub fn cursor_queque_obj(&mut self,p:&mut ObjectHeader) -> Ret {
@@ -107,7 +108,16 @@ impl Screen {
     pub fn get_size() -> RetType<Vec2>{
         Ok(Vec2::from(crossterm::terminal::size()?))
     }
+    pub fn _get_size(&self) -> RetType<Vec2>{
+        Ok(Vec2::from(crossterm::terminal::size()?))
+    }
 
+    pub fn print_title(&mut self,extra:Option<String>) -> Ret{
+        let title = format!("\x1b]0;{}{}\x07",self.title,extra.unwrap_or("".to_string()));
+        self.print_raw(title)?;
+        Ok(())
+        
+    }
 
     pub(crate) fn reset_color(&mut self) -> Ret{
         let bg = TermPrint::from(("",self.bg.0,self.bg.1));

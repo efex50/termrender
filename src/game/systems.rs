@@ -5,12 +5,12 @@ use crate::{LOG, Ret, RetTick, game::Game};
 #[macro_export]
 macro_rules! impl_sys {
     () => {
-//        fn as_any(&self) -> &dyn std::any::Any{
-//            self
-//        }
-//        fn as_any_mut(&mut self) -> &mut dyn std::any::Any{
-//            self
-//        }
+        fn as_any(&self) -> &dyn std::any::Any{
+            self
+        }
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any{
+            self
+        }
 
     };
 }
@@ -47,7 +47,7 @@ impl<'a> Systems<'a> {
             if let Some(target) = self.sys.get_mut(msg.to.as_str()){
                 target.fun._on_signal_recieved(&target._name, g, msg, &msg.hint.clone())?;
             }else {
-                LOG!(Err,"sended signal from {}, target not found: {}",msg.hint,msg.to);
+                LOG!(Error,"sended signal from {}, target not found: {}",msg.hint,msg.to);
             }
         }
         self.pending_signals.clear();
@@ -56,7 +56,7 @@ impl<'a> Systems<'a> {
 }
 
 
-type Closure<'a> = Box<dyn Fn(&mut dyn GameSystem) + 'a>;
+type Closure<'a> = Box<dyn FnMut(&mut dyn GameSystem) + 'a>;
 pub struct SystemBuilder<'a>{
     _name:Cow<'a,String>,
     _config:Closure<'a>,
@@ -76,32 +76,32 @@ impl<'a> SystemBuilder<'a> {
         self._name = Cow::Owned(name);
         self
     }
-    pub fn with_config(mut self,config:Closure<'a>) -> Self{
+    pub fn with_helper(mut self,config:Closure<'a>) -> Self{
         self._config = config;
         //self;
         todo!("not yet implemented the config system and there is no need for that");
     }
     pub fn build(self) -> System<'a>{
-        System { _name: self._name, fun: self.fun, _config: self._config, _init: false, _active: false }
+        System { _name: self._name, fun: self.fun, _helper: self._config, _init: false, _active: false }
     }
 }
 
 pub struct System<'a>{
     pub(crate) _name:Cow<'a,String>,
     pub fun:Box<dyn GameSystem>,
-    _config:Closure<'a>,
+    _helper:Closure<'a>,
     _init:bool,
     _active:bool,
 }
 impl<'a> System<'a> {
     pub fn new(name: String, sys: Box<dyn GameSystem>,active:bool) -> Self {
         let n= Cow::<'a,String>::Owned(name);
-        Self { _name:n, fun: sys,_init:false,_active: active ,_config:Box::new(|_|{})}
+        Self { _name:n, fun: sys,_init:false,_active: active ,_helper:Box::new(|_|{})}
     }
     pub fn activate(&mut self,game:&mut Game) -> RetTick{
         self._active = true;
         if !self._init {
-            (self._config)(&mut *self.fun);
+            (self._helper)(&mut *self.fun);
             self.fun._setup(&self._name, game)?;
         }
         self._init = true;
@@ -127,23 +127,10 @@ pub trait GameSystem{
     fn _process_loop(&mut self,_delta:Duration,_sys_name:&String,   _game:&mut Game) -> RetTick{Ok(true)}
     fn _kill_system(&mut self,_sys_name:&String,   _game:&mut Game) -> RetTick{Ok(true)}
     fn _on_signal_recieved(&mut self,_sys_name:&String,   _game:&mut Game,_signal:&mut Message,_from:&String) -> RetTick{Ok(true)}
-    //fn as_any(&self) -> &dyn Any;
-    //fn as_any_mut(&mut self) -> &mut dyn Any;
-}
-
-/*
-impl dyn GameSystem {
-    pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
-        self.as_any().downcast_ref::<T>()
-    }
-    pub fn downcast_mut<T: 'static>(&mut self) -> Option<&mut T> {
-        self.as_any_mut().downcast_mut::<T>()
-    }
-
-}
 
 
-
-        */
-
-
+    // auto traits with impl_sys!() macro
+    // todo!
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;    
+}   

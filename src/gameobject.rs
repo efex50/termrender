@@ -13,12 +13,12 @@ impl ObjectBuilder {
     }
     pub fn with_attribute(mut self,att:Attribute) -> Self{
         match att{
-            Attribute::Location(vec2)       => self.attributes.insert_Location(vec2),
-            Attribute::Velocity(vec2)       => self.attributes.insert_Velocity(vec2),
-            Attribute::Acc(vec2)        => self.attributes.insert_Acc(vec2),
-            Attribute::Mass(a)       => self.attributes.insert_Mass(a),
-            Attribute::Texture(a)       => self.attributes.insert_Texture(a),
-            Attribute::Col(aabb)        => self.attributes.insert_Col(aabb),
+            Attribute::Location(vec2)       => self.attributes.set_Location(vec2),
+            Attribute::Velocity(vec2)       => self.attributes.set_Velocity(vec2),
+            Attribute::Acc(vec2)        => self.attributes.set_Acc(vec2),
+            Attribute::Mass(a)       => self.attributes.set_Mass(a),
+            Attribute::Texture(a)       => self.attributes.set_Texture(a),
+            Attribute::Col(aabb)        => self.attributes.set_Col(aabb),
         };
         self
         
@@ -61,8 +61,10 @@ impl ObjectHeader {
             
             let new = (x,y).into();
             if new != *v {
-                self.previus = *v;
-                self.attributes.insert_Location(new);
+                if !self.changed{
+                    self.previus = *v;
+                }
+                self.attributes.set_Location(new);
                 self.changed = true;
             }
         }
@@ -84,6 +86,9 @@ impl ObjectHeader {
             textur.clearself(out, *loc, self.previus)?;
         }
         Ok(())
+    }
+    pub fn force_rerender(&mut self){
+        self.changed = true;
     }
     pub fn should_render(&self) -> bool{
         if self.attributes.check_Location() && self.attributes.check_Texture(){

@@ -8,16 +8,23 @@ fn main() -> std::io::Result<()> {
 
 
     LOG!(Warn,      "Test TEST");
-    LOG!(Err,       "Test TEST");
+    LOG!(Error,       "Test TEST");
     LOG!(Info,      "Test TEST");
     LOG!(Debug,     "Test TEST");
     LOG!(RandomAss, "Test TEST");
     LOG!(FileName,  file!());
     
-    let mut _main = Game::new("zort".to_string(),30.1,100.);
-    let logpath = format!("{}",file!());
-    let logpath = logpath.trim_end_matches(".rs");
-    _main.set_log_path(Some(logpath.to_string()));
+    let mut _main = Game::new("zort".to_string(),30.1,100.,30.);
+    // logging to a file
+    
+    {
+        let logpath = format!("{}",file!());
+        let logpath = logpath.trim_end_matches(".rs");
+        _main.set_log_path(Some(logpath.to_string()));
+    }
+    
+    
+    
     //_main.systems.new_system(Box::new(Redrawer::new()), "redrawer", true);
 
     let psys = PlayerSystem::new((50,25));
@@ -35,16 +42,36 @@ fn main() -> std::io::Result<()> {
 mod ticks{
 
 
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use termrender::{impl_sys, prelude::*,prelude::math::*};
 
-
+    const SCORE_COMP:&str = "skkor";
+    const SCORE_INC:&str = "skkor+";
+    const SCORE_DEC:&str = "skkor-";
+    const SCORE_BY:&str = "skkor=";
+    #[derive(Default)]
     struct BorderSystem{
-        area:AABB
+        area:AABB,
+        skor:i32,
+        self_id:usize,
+    }
+    impl BorderSystem {
+        fn regen_tex(&self) -> GameTexture{
+            make_texture!(
+                ((0,0) format!("score:{}",self.skor))
+            )
+        }
+        fn error_tex(&self,errmsg:String) -> GameTexture{
+            let t = PrintTypes::String { pos: Vec2 { x: 0, y: 0 }, char: TermPrint::from(errmsg)  };
+            make_texture!(
+                t
+            )
+        }
     }
     impl GameSystem for BorderSystem {
-        fn _setup(&mut self,_sys_name:&String,   _game:&mut Game) -> RetTick {
+        impl_sys!();
+        fn _setup(&mut self,_sys_name:&String,_game:&mut Game) -> RetTick {
             
             let corners = self.area.get_corners();
             let borders = ObjectBuilder::new()
@@ -59,21 +86,47 @@ mod ticks{
                         ((corners.1.x+1,corners.1.y) => (corners.2.x+1,corners.2.y) ("\u{2588}")),
                         //alt 
                         ((corners.3.x-1,corners.3.y+1) => (corners.2.x+2,corners.2.y+1) ("\u{2580}")),
-                        // köşeler
-                        //((corners.0.x-1,corners.0.y-1) ("\u{250F}")),
-                        //((corners.1.x+1,corners.1.y-1) ("\u{2513}")),
-                        //((corners.2.x+1,corners.2.y+1) ("\u{251B}")),
-                        //((corners.3.x-1,corners.3.y+1) ("\u{2517}")),
-                        //[self.arena_col,("x",GColor::Black,GColor::Red)],
                     )
                 ))
                 .with_component(Components::Wall)
                 .build();
-
+            let scoreboard = ObjectBuilder::new()
+                .with_attribute(Attribute::Location(Vec2::from((0,corners.3.y+2))))
+                .with_component(Components::Custom(SCORE_COMP.to_string()))
+                .with_attribute(Attribute::Texture(
+                    make_texture!(
+                        ((0,0) "score:0"),
+                    )
+                ))
+                .build();
             let world = _game.get_wolrd_mut();
             let id = world.insert_object_head(borders)?;
+            let se= world.insert_object_head(scoreboard)?;
+            self.self_id = se;
             LOG!(Debug,"Çerçeveler oluşturuldu id:{}",id);
+            LOG!(Debug,"skor tablosu oluşturuldu id:{}",se);
 
+            Ok(true)
+        }
+        fn _on_signal_recieved(&mut self,_sys_name:&String,   _game:&mut Game,_signal:&mut Message,_from:&String) -> RetTick {
+            match _signal.hint.as_str() {
+                SCORE_DEC => self.skor -=1,
+                SCORE_INC => self.skor +=1,
+                SCORE_BY => {
+                    let amount = _signal.msg.downcast_ref::<i32>().unwrap();
+                    self.skor += amount;
+                },
+                _ => {
+                    LOG!(Error,"Unrecognized signal:{}",_signal.hint);
+                    return Ok(true);
+                }
+            }
+            let w = _game.get_wolrd_mut();
+            let o = w.get_with_id(self.self_id).unwrap();
+            o.attributes.set_Texture(self.regen_tex());
+            o.force_rerender();
+            LOG!(Debug,"zort");
+            
             Ok(true)
         }
     }
@@ -99,11 +152,11 @@ mod ticks{
         fn _setup(&mut self,_name:&String,g:&mut Game) -> RetTick {
 
             let bor = BorderSystem{
-                area:self.arena_draw
+                area:self.arena_draw,
+                ..Default::default()
             };
-            g.systems.new_system(Box::new(bor), "border_sys", true);
+            g.systems.new_system(Box::new(bor), SCORE_COMP, true);
 
-            g.send_signal(_name, &"yılan".to_string(), Box::new("naber yarrrrak"));
 
             let w = g.get_wolrd_mut();
             let t =  make_texture!(
@@ -125,17 +178,19 @@ mod ticks{
 
 
             let p = w.get_with_component(Components::Player);
-            LOG!(Debuh,"{:?}",p);
+            LOG!(Debug,"{:?}",p);
             self.player_id = id;
             LOG!(Debug,"Oyuncu oluşturuldu id:{}",id);
 
             Ok(true)
         }
 
-
+        fn _process_loop(&mut self,_delta:Duration,_sys_name:&String,   _game:&mut Game) -> RetTick {
+            _game.send_signal(SCORE_INC.to_string(),SCORE_COMP.to_string(), Box::new("sik"));
+            Ok(true)
+        }
     
-        fn _physics_loop(&mut self,delta:Duration,_name:&String,g:&mut Game) -> RetTick {
-            
+        fn _physics_loop(&mut self,_delta:Duration,_name:&String,g:&mut Game) -> RetTick {
             let player = g.world.get_with_id(self.player_id).unwrap();
             let pos = player.get_cords().unwrap();
                 
@@ -173,7 +228,7 @@ mod ticks{
             if col_y.is_colliding(&self.arena_col) {
                 new_pos.y += delta.y;
             }
-        
+
             player.set_cords(new_pos.x, new_pos.y)?;
             Ok(true)
 
@@ -286,7 +341,7 @@ mod ticks{
 
         fn _on_signal_recieved(&mut self,_sys_name:&String,   _game:&mut Game,_signal:&mut Message,_from:&String) -> RetTick {
             
-            let s = _signal.msg.downcast_ref::<&str>().unwrap();
+            let s = _signal.msg.downcast_ref::<Box<str>>().unwrap();
             LOG!(Debug,"signal recieved from {}: {}",_signal.hint,s);
 
             
@@ -337,4 +392,6 @@ mod test{
     println!("{:?}",d);
 
     }
+
+
 }

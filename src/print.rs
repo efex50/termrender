@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use crossterm::style::Color;
 
-use crate::{LOG, RESET_COLOR, Ret, RetType, game::screen::{CursorMoveTo, Screen}, math::Vec2, physics::AABB};
+use crate::{LOG, Ret, RetType, game::screen::{CursorMoveTo, Screen}, math::Vec2, physics::AABB};
 
 #[derive(Debug,Clone, Copy,PartialEq)]
 pub enum GColor{
@@ -309,7 +309,11 @@ macro_rules! make_texture {
             pos:$aabb,
             char:TermPrint::from($ch)
         }
-    }
+    };
+    // PrintType variant
+    (@item $type:expr) =>{
+        $type
+    };
 }
 
 
@@ -404,7 +408,6 @@ impl PrintTypes {
             // 45
             out.cursor_move(CursorMoveTo::Pos((start.x as u16,start.y as u16)))?;
             if start.y > end.y{
-                LOG!(Warn,"45 deger");
                 for _x in start.x..end.x+1{
                     out.queue(char)?;
                     out.cursor_move(CursorMoveTo::Up(1))?;
@@ -412,7 +415,6 @@ impl PrintTypes {
             }
             // 315
             else {
-                LOG!(Warn,"315 deger");
                 for _x in start.x..end.x+1{
                     out.queue(char)?;
                     out.cursor_move(CursorMoveTo::Down(1))?;
@@ -423,7 +425,7 @@ impl PrintTypes {
         }
         // cross
         else {
-            panic!("this type of lines are not yet implemented")
+            bresenham_line_i32(out, start, end, char)?;
         }
         Ok(())
 
@@ -470,7 +472,7 @@ impl PrintTypes {
         }
         // cross
         else {
-            panic!("this type of lines are not yet implemented")
+            bresenham_line_i32(out, start, end, &TermPrint::from(" "))?;
         }
         Ok(true)
 
@@ -525,6 +527,42 @@ impl PrintTypes {
     }
 }
 
+
+fn bresenham_line_i32(out: &mut Screen, start: Vec2, end: Vec2, ch: &TermPrint) -> Ret{
+    let dx = (end.x - start.x).abs();
+    let dy = (end.y - start.y).abs();
+    let sx = if start.x < end.x { 1 } else { -1 };
+    let sy = if start.y < end.y { 1 } else { -1 };
+
+    let mut x = start.x;
+    let mut y = start.y;
+
+    let mut err = if dx > dy { dx } else { -dy } / 2;
+
+    loop {
+        // karakteri yaz
+        out.cursor_move(CursorMoveTo::Pos((x as u16, y as u16)))?;
+        out.queue(ch.clone())?;
+
+        if x == end.x && y == end.y {
+            break;
+        }
+
+        let e2 = err;
+
+        if e2 > -dx {
+            err -= dy;
+            x += sx;
+        }
+        if e2 < dy {
+            err += dx;
+            y += sy;
+        }
+    }
+
+    Ok(())
+}
+
 #[test]
 fn tstaastas(){
     println!("{}","".len())
@@ -551,7 +589,11 @@ pub struct TermPrint {
     pub fore:GColor,
     pub text:String,
 }
-
+impl TermPrint {
+    pub fn as_plain(&self) -> String{
+        self.text.to_string()
+    }
+}
 
 impl From<&str> for TermPrint{
     fn from(value: &str) -> Self {
@@ -592,31 +634,60 @@ impl From<(&str,GColor,GColor)> for TermPrint{
         Self { background: value.1, fore: value.2, text: value.0.to_string() }
     }
 }
+impl From<String> for TermPrint{
+    fn from(value: String) -> Self {
+        Self { background: GColor::Default, fore: GColor::Default, text: value }
+    }
+}
+impl From<(String,GColor)> for TermPrint{
+    fn from(value: (String,GColor)) -> Self {
+        Self { background: value.1, fore: GColor::Default, text: value.0 }
+    }
+}
+impl From<(String,(),GColor)> for TermPrint{
+    fn from(value: (String,(),GColor)) -> Self {
+        Self { background: GColor::Default, fore: value.2, text: value.0 }
+    }
+}
+impl From<(String,GColor,GColor)> for TermPrint{
+    fn from(value: (String,GColor,GColor)) -> Self {
+        Self { background: value.1, fore: value.2, text: value.0 }
+    }
+}
 
 impl fmt::Display for TermPrint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let back = RGB::from(self.background);
-        let fore = RGB::from(self.fore);
         let back = {
-            if back.res{
-                "".to_string()
-            }else {
-                format!("\x1b[48;2;{};{};{}m",back.r,back.g,back.b)
+            match self.background {
+                GColor::Default => "".to_string(),
+                _ => {
+                    let rgb = RGB::from(self.background);
+                    if rgb.res{
+                        "".to_string()
+                    }else {   
+                        format!("\x1b[48;2;{};{};{}m",rgb.r,rgb.g,rgb.b)
+                    }
+                },
             }
         };
-        let front = {
-            if fore.res{
-                "".to_string()
-            }else {
-                format!("\x1b[38;2;{};{};{}m",fore.r,fore.g,fore.b)
+        let fore = {
+            match self.fore {
+                GColor::Default => "".to_string(),
+                _ => {
+                    let rgb = RGB::from(self.fore);
+                    if rgb.res{
+                        "".to_string()
+                    }else {   
+                        format!("\x1b[38;2;{};{};{}m",rgb.r,rgb.g,rgb.b)
+                    }
+                },
             }
         };
-        
         write!(
             f,
             "{}{}{}",
             back,
-            front,
+            fore,
             self.text,
             //"\x1b[0m"
         )

@@ -1,5 +1,5 @@
-use std::{backtrace::Backtrace, collections::HashSet, fmt::format, fs::OpenOptions, io::{Write, stdout}, sync::{Arc, Mutex}, time::{Duration, Instant}};
-use crate::{GAME_STARTED, Ret, RetTick, RetType, game::{input::{Input, Keys}, logger::get_logger, screen::Screen, systems::Systems}, gameobject::ObjectHeader, math::Vec2, prelude::Components, print::GColor};
+use std::{backtrace::Backtrace, collections::HashSet,fs::OpenOptions, io::{Write, stdout}, sync::{Arc, Mutex}, time::Duration};
+use crate::{GAME_STARTED, Ret, RetTick, RetType, game::{input::{Input, Keys}, logger::get_logger, screen::Screen, systems::Systems, timing::Timing}, gameobject::ObjectHeader, math::Vec2, prelude::Components, print::GColor};
 
 
 pub mod systems;
@@ -9,29 +9,7 @@ pub mod internals;
 pub mod logger;
 pub mod screen;
 
-pub struct Timing {
-    _last_physics_frame: Instant,
-    _last_process_frame: Instant,
-    physics_fps: f32,
-    process_fps:f32,
-}
-impl Timing {
-    pub fn new() -> Self{
-        let now = Instant::now();
-        Self{
-            _last_physics_frame:now,
-            _last_process_frame:now,
-            physics_fps:30.,
-            process_fps:30.,
-        }
-    }
-    pub fn get_delta_physics(&self) -> Duration{
-        self._last_physics_frame.elapsed()
-    }
-    pub fn get_delta_process(&self) -> Duration{
-        self._last_process_frame.elapsed()
-    }
-}
+pub mod timing;
 
 
 pub struct World {
@@ -118,7 +96,6 @@ pub enum Flags{
 }
 
 pub struct Game<'a>{
-    pub title: String,
     panic_logs: Arc<Mutex<Vec<String>>>,
     flags: HashSet<Flags>,
     is_started: bool,
@@ -133,7 +110,7 @@ pub struct Game<'a>{
 
 
 impl<'a> Game<'a> {
-    pub fn new(title:String,physics_fps:f32,process_fps:f32) -> Self{
+    pub fn new(title:String,physics_fps:f32,process_fps:f32,render_fps:f32) -> Self{
         
         
         let panic_logs: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
@@ -149,11 +126,12 @@ impl<'a> Game<'a> {
         }));
 
         let screen = Vec2::from(crossterm::terminal::size().unwrap());
-        let terminal = Screen {
+        let screen = Screen {
             bg:(GColor::RGB(50, 100, 150),GColor::White,' '),
             out:stdout(),
             screen,
-            posy:0
+            posy:0,
+            title:title
         };
 
         let world = World {
@@ -162,28 +140,22 @@ impl<'a> Game<'a> {
         let mut timing = Timing::new();
         timing.physics_fps = physics_fps;
         timing.process_fps = process_fps;
+        timing.render_fps  = render_fps;
 
         let input = Input::new(Duration::from_millis(1));
         // init the timestamp of the game start
         let _ = GAME_STARTED.elapsed();
         Self { 
             input,
-            screen: terminal,
+            screen,
             timing,
             world,
-            title,
             flags:HashSet::new(),
             is_started:false,
             systems: Systems::new(),
             panic_logs
         }
     }   
-    pub fn update_physics_delta(&mut self){
-        self.timing._last_physics_frame = Instant::now();
-    }
-    pub fn update_process_delta(&mut self){
-        self.timing._last_process_frame = Instant::now();
-    }
     pub fn print(&mut self,text:String) -> Ret{
         self.screen.cursor_move(screen::CursorMoveTo::Pos((0, self.screen.posy)))?;
         print!("{}",text);
@@ -215,7 +187,7 @@ impl<'a> Game<'a> {
 
             self.is_started = !self.is_started;
         };
-        let screen = Vec2::from(crossterm::terminal::size()?);
+        let screen = Screen::get_size()?;
         if screen != self.screen.screen{
             self.rerender_all()?;
             self.screen.screen = screen;
@@ -223,10 +195,65 @@ impl<'a> Game<'a> {
         
         //self.clear_bg()?;
 
+        // handle the signals
+        let s = self.get_systems_mut();
+        let g = self.get_self_mut();
+        s.deliver_signals(g)?;
+        Ok(true)
+    }
+    
+    fn tick(&mut self) -> RetTick{
+        if self.input.pressed_keys.contains(&Keys::Esc){
+            return Ok(false);
+        }
+
+        let mut res;
+        // code that runs before any ticl
+        res = self.tick_enter()?;
+        if !res{return Ok(res)}
+
+        let g = self.get_self_mut();
+        let t = self.get_timing_mut();
+        // every physics tics
+        if t.should_physics(){
+            for (name,sys) in &mut self.get_systems_mut().sys{
+                if sys.is_active(){
+                    if !sys.is_init(){
+                        sys.activate(g)?;
+                    }
+                    res = sys.fun._physics_loop(t.get_delta_physics(),name,g)?
+                }
+                if !res {return Ok(res);}
+            }
+            t.update_physics_delta();
+        }
+        // every process tick
+        // basicly same for now except timing
+        if t.should_process(){
+            for (name,sys) in &mut self.get_systems_mut().sys{
+                if sys.is_active(){
+                    if !sys.is_init(){
+                        sys.activate(g)?;
+                    }
+                    res = sys.fun._process_loop(t.get_delta_process(),name,g)?
+                }
+                if !res {return Ok(res);}
+            }
+            t.update_process_delta();
+        }
+     
+        // rendering
+        if t.should_render(){
+            t.update_render_delta();
+            self.tick_render()?;
+        };
+        Ok(true)
+    }
+    fn tick_render(&mut self) -> RetTick{            
         // change the debug flag
         if self.input.just_pressed_keys.contains(&Keys::Debug){
             if self.flags.contains(&Flags::Debug){
-                self.print_title(None)?;
+                self.screen.print_title(None)?;
                 self.flags.remove(&Flags::Debug);
             }else {
                 self.flags.insert(Flags::Debug);
@@ -236,46 +263,10 @@ impl<'a> Game<'a> {
             self.rerender_all()?;
         };
         if self.flags.contains(&Flags::Debug) {
-            let fps = 1.0 / self.timing._last_physics_frame.elapsed().as_secs_f32();
-            self.print_title(Some(format!(" fps:{:.1}  press {:?} screen {:?}",fps,self.input.pressed_keys,self.screen.screen)))?;
+            let fps = 1.0 / self.timing.get_delta_process().as_secs_f32();
+            self.screen.print_title(Some(format!(" fps:{:.1}  press {:?} screen {:?}",fps,self.input.pressed_keys,self.screen.screen)))?;
         }
-        // handle the signals
-        let s = self.get_systems_mut();
-        let g = self.get_self_mut();
-        s.deliver_signals(g)?;
-        Ok(true)
-    }
-    
-    fn tick(&mut self) -> RetTick{
-        let mut res;
-        // code that runs before any ticl
-        res = self.tick_enter()?;
-        if !res{return Ok(res)}
 
-        let g = self.get_self_mut();
-        for (name,sys) in &mut self.get_systems_mut().sys{
-            if sys.is_active(){
-                
-                if !sys.is_init(){
-                    sys.activate(g)?;
-                }
-                let delta_phy = self.timing._last_physics_frame.elapsed();
-                let delta_proc = self.timing._last_process_frame.elapsed();
-                res = 
-                sys.fun._physics_loop(delta_phy,name,g)? &
-                sys.fun._process_loop(delta_proc,name,g)?;
-            }
-            if !res {return Ok(res);}
-        }
-     
-        // code that runs after any tick
-        self.tick_exit()
-    }
-    fn tick_exit(&mut self) -> RetTick{
-        if self.input.pressed_keys.contains(&Keys::Esc){
-            return Ok(false);
-        }
-            
         for x in &mut self.get_wolrd_mut().objects{
             if x.attributes.check_Texture() && x.attributes.check_Location() && x.should_render(){
                 let mut scr = self.get_screen_mut();
@@ -287,8 +278,7 @@ impl<'a> Game<'a> {
         }
         self.screen.out.flush()?;
         self.input.just_pressed_keys.clear();
-        self.update_physics_delta();
-        self.update_process_delta();
+        
         Ok(true)
     }
 
@@ -297,12 +287,9 @@ impl<'a> Game<'a> {
 
             self.input.poll_keys()?;
 
-            if self.should_render(){ 
+            let r = self.tick()?;
+            if !r {break};
 
-                let r = self.tick()?;
-                if !r {break};
-
-            }        
         }
         Ok(())
     }
@@ -363,7 +350,8 @@ impl<'a> Drop for Game<'a> {
                         .open(p).unwrap(); 
 
                     for x in logs.logs.iter(){
-                        file.write_all(x.as_bytes()).unwrap();
+                        let clean = strip_ansi_escapes::strip_str(x);
+                        file.write_all(clean.as_bytes()).unwrap();
                         file.write(&[b'\n']).unwrap();
                     }
                     break;
