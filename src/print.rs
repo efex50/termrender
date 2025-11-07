@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use crossterm::style::Color;
 
-use crate::{LOG, Ret, RetType, game::screen::{CursorMoveTo, Screen}, math::Vec2, physics::AABB};
+use crate::{ Ret, RetType, game::screen::{CursorMoveTo, Screen}, math::Vec2, physics::AABB};
 
 #[derive(Debug,Clone, Copy,PartialEq)]
 pub enum GColor{
