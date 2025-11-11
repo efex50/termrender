@@ -1,5 +1,13 @@
 
 
+
+
+
+fn main(){
+    
+}
+
+
 #[cfg(test)]
 mod t{
     use std::{alloc::GlobalAlloc, mem};
