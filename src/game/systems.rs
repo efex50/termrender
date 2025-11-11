@@ -1,6 +1,6 @@
 use std::{any::Any, borrow::Cow, collections::{HashMap, HashSet}, fmt::Debug, time::Duration};
 
-use crate::{LOG, Ret, RetTick, game::Game};
+use crate::{Ret, RetTick, game::Game};
 
 #[macro_export]
 macro_rules! impl_sys {
@@ -143,7 +143,7 @@ impl SystemBuilder {
         self
     }
     pub fn build<'a>(self) -> System<'a>{
-        let mut s = System::new(self._name.to_string(), self.fun, false);
+        let s = System::new(self._name.to_string(), self.fun, false);
         s
     }
 }
