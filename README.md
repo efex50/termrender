@@ -3,7 +3,7 @@ a wip terminal rendering game engine
 
 running examples:
 
-cargo r --example snake
+cargo r --example snake --features debug
 
 
 keys:

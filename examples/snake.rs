@@ -1,6 +1,6 @@
 
 use termrender::prelude::*;
-use crate::ticks::{FoodSystem, SnakeHead};
+use crate::ticks::SnakeHead;
 
 const START:&str = "sim.play";
 
@@ -112,7 +112,6 @@ mod ticks{
                 g.set_flag(termrender::game::Flags::Rerender);
             }else {
 
-                let corners = self.area.get_corners();
                 borders.attributes.set_Render(true);
                 let score_pos = Vec2::from((0,self.area.cor2.y+2));
                 score_comp.attributes.set_Location(score_pos);
