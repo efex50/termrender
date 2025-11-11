@@ -563,10 +563,6 @@ fn bresenham_line_i32(out: &mut Screen, start: Vec2, end: Vec2, ch: &TermPrint) 
     Ok(())
 }
 
-#[test]
-fn tstaastas(){
-    println!("{}","".len())
-}
 
 impl Default for PrintTypes {
     fn default() -> Self {
@@ -578,10 +574,6 @@ impl Default for PrintTypes {
 }
 
 
-#[test]
-fn test(){
-    let _t = GameTexture::new(Vec::new());
-}
 
 #[derive(Debug,Clone,)]
 pub struct TermPrint {
@@ -691,14 +683,5 @@ impl fmt::Display for TermPrint {
             self.text,
             //"\x1b[0m"
         )
-    }
-}
-
-
-
-#[test]
-fn forr(){
-    for x in 0..10{
-        println!("{}",x)
     }
 }

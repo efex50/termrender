@@ -69,6 +69,16 @@ impl From<(Vec2,Vec2)> for AABB {
         AABB { cor1: value.0, cor2: value.1 }
     }
 }
+impl From<((i32,i32),(i32,i32))> for AABB {
+    fn from(value: ((i32,i32),(i32,i32))) -> Self {
+        AABB { cor1: Vec2::from(value.0), cor2: Vec2::from(value.1) }
+    }
+}
+impl From<i32> for AABB {
+    fn from(value: i32) -> Self {
+        AABB { cor1: Vec2::from(0), cor2: Vec2::from(value) }
+    }
+}
 impl Add for AABB {
     type Output = AABB;
 

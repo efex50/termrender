@@ -26,12 +26,12 @@ esc exit
 
 todo:
 
-snake game
+snake game:✅ 
 
-pong
+pong:❎
 
-camera system
+camera system:❎
 
-convay game of life
+convay game of life:❎
 
-platformer
+platformer:❎

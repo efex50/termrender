@@ -1,6 +1,6 @@
-use std::{any::Any, borrow::Borrow};
+use std::any::Any;
 
-use crate::{Ret, game::{Game, get_logger}};
+use crate::{Ret, game::{Flags, Game, get_logger}};
 
 
 
@@ -35,13 +35,42 @@ impl<'a> Game<'a>{
         Ok(())
     }
 
+
+    pub fn set_flag(&self,flag:Flags) {
+        let g = self.get_self_mut();
+        g.flags.insert(flag);
+    }
+    pub fn has_flag(&self,flag:Flags) -> bool {
+        self.flags.contains(&flag)
+    }
+    pub fn unset_flag(&self,flag:Flags) {
+        let g = self.get_self_mut();
+        g.flags.remove(&flag);
+    }
+
+
+
     /// send an any signal
     /// 
     /// 
-    pub fn send_signal<S:Borrow<String>>(&self,hint:S ,to: S,msg: Box<dyn Any + Send>){
-        let (from,to) = (hint.borrow(),to.borrow());
+    pub fn send_signal<S1:Into<String>,S2:Into<String>>(&self,hint:S1 ,to: S2,msg: Box<dyn Any + Send>){
+        let (from,to) = (hint.into(),to.into());
         let sys = self.get_systems_mut();
-        sys.send_signal(from, to, msg);
+        sys.send_signal(&from, &to, msg);
+    }
+    
+    /// register signal to systems with name
+    /// 
+    /// 
+    pub fn register_signal<S1:Into<String>,S2:Into<String>>(&self,sig_name:S1 ,sys_name: S2) -> Ret{
+        let (sig_name,sys_name) = (sig_name.into(),sys_name.into());
+        let sys = self.get_systems_mut();
+        sys.register_signal(&sys_name, &sig_name)
+    }
+    pub fn unregister_signal<S1:Into<String>,S2:Into<String>>(&self,sig_name:S1 ,sys_name: S2)  -> Ret{
+        let (sig_name,sys_name) = (sig_name.into(),sys_name.into());
+        let sys = self.get_systems_mut();
+        sys.unregister_signal(&sys_name, &sig_name)
     }
 
 }

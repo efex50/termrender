@@ -19,6 +19,9 @@ impl ObjectBuilder {
             Attribute::Mass(a)       => self.attributes.set_Mass(a),
             Attribute::Texture(a)       => self.attributes.set_Texture(a),
             Attribute::Col(aabb)        => self.attributes.set_Col(aabb),
+            Attribute::Render(a) => self.attributes.set_Render(a),
+            Attribute::Custom(custom_attr) => self.attributes.set_Custom(custom_attr),
+            Attribute::Tag(s) => self.attributes.set_Tag(s),
         };
         self
         
@@ -34,19 +37,31 @@ impl ObjectBuilder {
             attributes:self.attributes,
             changed:true,
             components:self.components,
+            printed:false,
             id:0,
-            previus:Vec2::new(0, 0)
+            previus:Vec2::new(0, 0),
+            force_rerender:false
         }
     }
 
 }
 
+#[derive(Debug)]
+pub enum ShouldRender{
+    Unchanged,
+    Changed,
+    ForceRerender,
+    Clear,
+    Disabled,
+}
 pub struct ObjectHeader{
     pub id:usize,
-    pub(crate) previus:Vec2,
-    changed:bool,
     pub attributes:Attributes,
     pub components:Vec<Components>,
+    pub(crate) previus:Vec2,
+    pub(crate) printed:bool,
+    changed:bool,
+    force_rerender:bool,
 }
 impl ObjectHeader {
     pub fn get_cords(&self) -> Option<Vec2>{
@@ -76,25 +91,81 @@ impl ObjectHeader {
         if let Some(loc) = self.attributes.get_Location() && let Some(textur) = self.attributes.get_Texture(){
             textur.print(out, *loc)?;
             self.changed = false;
+            self.printed = true;
             Ok(true)
         }else {
             Ok(false)
         }
     }
-    pub fn clearself(&self,out:&mut Screen) -> Ret{
+    pub fn clearself(&mut self,out:&mut Screen) -> Ret{
         if let Some(loc) = self.attributes.get_Location() && let Some(textur) = self.attributes.get_Texture(){
-            textur.clearself(out, *loc, self.previus)?;
+            if self.printed {
+                textur.clearself(out, *loc, self.previus)?;
+                self.printed = false;
+            }
+            self.printed = false;
         }
         Ok(())
     }
-    pub fn force_rerender(&mut self){
-        self.changed = true;
+    pub fn is_printed(&self) -> bool{
+        self.printed
     }
-    pub fn should_render(&self) -> bool{
-        if self.attributes.check_Location() && self.attributes.check_Texture(){
-            return self.changed;
+    /// force rerender the object
+    pub fn force_rerender(&mut self){
+        self.force_rerender = true;
+    }
+
+    pub fn _should_render(&mut self) -> ShouldRender {
+        if self.attributes.check_Location() && self.attributes.check_Texture() {
+            if self.force_rerender {
+                self.force_rerender = false; // mutlaka sıfırla
+                return ShouldRender::ForceRerender;
+            }
+
+            if self.attributes.check_Render() {
+                if let Some(render) = self.attributes.get_Render() {
+                    if !*render {
+                        return if self.printed {
+                            ShouldRender::Clear
+                        } else {
+                            ShouldRender::Disabled
+                        };
+                    }
+                }
+            }
+
+            return if self.changed {
+                ShouldRender::Changed
+            } else {
+                ShouldRender::Unchanged
+            };
         }
-        return false;
+
+        ShouldRender::Disabled
+    }
+    pub fn should_render(&mut self) -> ShouldRender{
+        
+        if self.attributes.check_Location() && self.attributes.check_Texture(){
+            if self.force_rerender{
+                self.force_rerender = false;
+                return ShouldRender::ForceRerender;
+            }
+            if self.attributes.check_Render(){
+                if !*self.attributes.get_Render().unwrap(){
+                    if self.printed{
+                        return ShouldRender::Clear;
+                    }
+                    return ShouldRender::Disabled;
+                }
+            }
+            return match self.changed{
+                true => ShouldRender::Changed,
+                false => ShouldRender::Unchanged,
+            };
+        }
+        return ShouldRender::Disabled;
+        
+
 
     }
 }

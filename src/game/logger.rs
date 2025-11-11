@@ -65,7 +65,6 @@ pub struct Logger{
 impl Logger {
     pub fn new(path:Option<String>) -> Self {
         let m = Vec::new();
-
         Logger { logs: m, log_path: path }
     }
     pub fn log<S:Into<String>>(&mut self,level:LogType,path:S,msg:S,line:u32){
@@ -77,28 +76,45 @@ impl Logger {
                 LogType::Level(l) => 
                     match l {
                         LogLevel::Info => {
+                            if !cfg!(feature = "info"){
+                                return;
+                            }
                             // light blue
                             // old from((100,180,255))
                             TermPrint::from((l.as_string(),(),GColor::Cyan))
                         },
                         LogLevel::Warn => {
+                            if !cfg!(feature = "warn"){
+                                return;
+                            }
                             // yellow
                             // old from((255,210,90))
                             TermPrint::from((l.as_string(),(),GColor::Yellow))
                         },
                         LogLevel::Error => {
+                            if !cfg!(feature = "error"){
+                                return;
+                            }
+
                             // red
                             // old from((255,85,85))
                             TermPrint::from((l.as_string(),(),GColor::Red))
                         },
                         LogLevel::Debug => {
+                            //if feature debug is not active do not print debug
+                            
+                            if !cfg!(feature = "debug"){
+                                return;
+                            }
                             // green
                             // from((80,200,120))
                             TermPrint::from((l.as_string(),(),GColor::Green))
                         },
                     }
                 ,
-                LogType::Str(s) => TermPrint::from((s,(),GColor::DarkGrey)),
+                LogType::Str(s) => {
+                    TermPrint::from((s,(),GColor::DarkGrey))
+                },
             }
         };
         let msg = format!("{}:{}\x1b[0m:{}:{line}:{}",timestamp,logmsg,path,msg);

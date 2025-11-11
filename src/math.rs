@@ -144,6 +144,6 @@ mod test{
     fn order(){
         let v1 = Vec2::from((1,0));
         let v2 = Vec2::from((1,3));
-        println!("{}",v1 < v2)
+        assert!(v1<v2);
     }
 }
