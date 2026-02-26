@@ -1,57 +1,72 @@
-use std::{backtrace::Backtrace, collections::HashSet,fs::OpenOptions, io::{Write, stdout}, sync::{Arc, Mutex}, time::Duration};
-use crate::{GAME_STARTED, LOG, Ret, RetTick, RetType, game::{input::{Input, Keys}, logger::get_logger, screen::Screen, systems::Systems, timing::Timing}, gameobject::ObjectHeader, math::Vec2, prelude::{Components, signals::RESIZED}, print::GColor};
+use crate::{
+    GAME_STARTED, LOG, Ret, RetTick, RetType,
+    game::{
+        input::{Input, Keys},
+        logger::get_logger,
+        screen::Screen,
+        systems::Systems,
+        timing::Timing,
+    },
+    gameobject::ObjectHeader,
+    math::Vec2,
+    prelude::{Components, signals::RESIZED},
+    print::GColor,
+};
+use std::{
+    backtrace::Backtrace,
+    collections::HashSet,
+    fs::OpenOptions,
+    io::{Write, stdout},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-
-pub mod systems;
 pub mod input;
-pub mod subgamegetters;
 pub mod internals;
 pub mod logger;
 pub mod screen;
+pub mod subgamegetters;
+pub mod systems;
 
-pub mod timing;
+pub mod py_api;
 pub mod signal_types;
+pub mod timing;
 
-pub const GAME_NAMESPACE:&str = "game";
+pub const GAME_NAMESPACE: &str = "game";
 
 pub struct World {
     pub objects: Vec<ObjectHeader>,
 }
 impl World {
-    pub fn get_with_id(&mut self,idx:usize) -> Option<&mut ObjectHeader>{
-
-        if let Some(obj) = self.objects.get_mut(idx){
-            let p = unsafe {
-                (obj as *mut ObjectHeader).as_mut().unwrap()
-            };
+    pub fn get_with_id(&mut self, idx: usize) -> Option<&mut ObjectHeader> {
+        if let Some(obj) = self.objects.get_mut(idx) {
+            let p = unsafe { (obj as *mut ObjectHeader).as_mut().unwrap() };
             Some(p)
-        }else {
+        } else {
             None
         }
     }
-    pub fn get_with_component(&mut self,comp:Components) -> Vec<&mut ObjectHeader>{
+    pub fn get_with_component(&mut self, comp: Components) -> Vec<&mut ObjectHeader> {
         let w = self.self_p();
         let mut v = Vec::new();
-        for x in w.objects.iter_mut(){
-            if x.components.contains(&comp){
+        for x in w.objects.iter_mut() {
+            if x.components.contains(&comp) {
                 unsafe {
-                    v.push(
-                        (x as *mut ObjectHeader).as_mut().unwrap()
-                    );
+                    v.push((x as *mut ObjectHeader).as_mut().unwrap());
                 };
             }
         }
         v
     }
-    pub fn get_with_components(&mut self,comp:Vec<Components>) -> Vec<&mut ObjectHeader>{
+    pub fn get_with_components(&mut self, comp: Vec<Components>) -> Vec<&mut ObjectHeader> {
         let w = self.self_p();
         let mut v = Vec::new();
-        for obj in w.objects.iter_mut(){
+        for obj in w.objects.iter_mut() {
             let has_all = {
                 let mut complete = false;
-                'main:for x in &comp{
-                    for y in &obj.components{
-                        if x == y{
+                'main: for x in &comp {
+                    for y in &obj.components {
+                        if x == y {
                             complete = true;
                             continue;
                         }
@@ -61,56 +76,56 @@ impl World {
                 }
                 complete
             };
-            if has_all{
+            if has_all {
                 unsafe {
-                    v.push(
-                        (obj as *mut ObjectHeader).as_mut().unwrap()
-                    );
+                    v.push((obj as *mut ObjectHeader).as_mut().unwrap());
                 };
             }
         }
         v
     }
-    pub fn query_comp(&self,comp:Components) -> Option<&mut ObjectHeader>{
+    pub fn query_comp(&self, comp: Components) -> Option<&mut ObjectHeader> {
         let w = self.self_p();
-        for x in w.objects.iter_mut(){
-            if x.components.contains(&comp){
-                let p = unsafe{(x as *mut ObjectHeader).as_mut().unwrap()};
+        for x in w.objects.iter_mut() {
+            if x.components.contains(&comp) {
+                let p = unsafe { (x as *mut ObjectHeader).as_mut().unwrap() };
                 return Some(p);
             }
-        };
+        }
         None
     }
-    pub fn insert_object_head(&mut self,header: ObjectHeader) -> RetType<usize> {
+    pub fn insert_object_head(&mut self, header: ObjectHeader) -> RetType<usize> {
         let mut o = ObjectHeader::from(header);
         let id = self.objects.len();
         o.id = id;
-        if let Some(p) = o.attributes.get_Location(){
+        if let Some(p) = o.attributes.get_Location() {
             o.previus = *p;
         }
         self.objects.push(o);
         Ok(id)
     }
 
-
     /// iterates every object in wordl
-    /// 
+    ///
     /// don't do it
-    pub fn map_objects(&mut self,mut map:impl FnMut(&mut ObjectHeader)){
-        for x in self.objects.iter_mut(){
+    pub fn map_objects(&mut self, mut map: impl FnMut(&mut ObjectHeader)) {
+        for x in self.objects.iter_mut() {
             (map)(x)
         }
     }
 
-    fn self_p(&self) -> &mut Self{
-        let a = unsafe { (((self as *const _) as usize) as *mut Self).as_mut().unwrap() };
+    fn self_p(&self) -> &mut Self {
+        let a = unsafe {
+            (((self as *const _) as usize) as *mut Self)
+                .as_mut()
+                .unwrap()
+        };
         a
     }
-
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum Flags{
+pub enum Flags {
     Debug,
     Rerender,
     Resized,
@@ -118,107 +133,107 @@ pub enum Flags{
     Custom(String),
 }
 
-pub struct Game<'a>{
+pub struct Game<'a> {
     panic_logs: Arc<Mutex<Vec<String>>>,
     flags: HashSet<Flags>,
     is_started: bool,
 
-    pub screen:     Screen,
-    pub timing:     Timing,
-    pub input:      Input,
-    pub world:      World,
-    pub systems:    Systems<'a>,
-
+    pub screen: Screen,
+    pub timing: Timing,
+    pub input: Input,
+    pub world: World,
+    pub systems: Systems<'a>,
 }
 
-
 impl<'a> Game<'a> {
-    pub fn new(title:String,physics_fps:f32,process_fps:f32,render_fps:f32) -> Self{
-        
+    pub fn new(title: String, physics_fps: f32, process_fps: f32, render_fps: f32) -> Self {
         let panic_logs: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let hook_logs = Arc::clone(&panic_logs);
         std::panic::set_hook(Box::new(move |info| {
-
             let msg = format!("panic: {info}");
             eprintln!("{msg}");
             // also push into logs
             if let Ok(mut l) = hook_logs.lock() {
-                l.push(format!("{}",msg));
+                l.push(format!("{}", msg));
             }
         }));
 
         let screen = Vec2::from(crossterm::terminal::size().unwrap());
         let screen = Screen {
-            bg:(GColor::RGB(50, 100, 150),GColor::White,' '),
-            out:stdout(),
+            bg: (GColor::RGB(50, 100, 150), GColor::White, ' '),
+            out: stdout(),
             screen,
-            posy:0,
-            title:title,
+            posy: 0,
+            title: title,
         };
 
         let world = World {
-            objects:Vec::new()
+            objects: Vec::new(),
         };
         let mut timing = Timing::new();
         timing.physics_fps = physics_fps;
         timing.process_fps = process_fps;
-        timing.render_fps  = render_fps;
+        timing.render_fps = render_fps;
 
         let input = Input::new(Duration::from_millis(1));
         // init the timestamp of the game start
         let _ = GAME_STARTED.elapsed();
-        Self { 
+        Self {
             input,
             screen,
             timing,
             world,
-            flags:HashSet::new(),
-            is_started:false,
+            flags: HashSet::new(),
+            is_started: false,
             systems: Systems::new(),
-            panic_logs
+            panic_logs,
         }
-    }   
-    pub fn print(&mut self,text:String) -> Ret{
-        self.screen.cursor_move(screen::CursorMoveTo::Pos((0, self.screen.posy)))?;
-        print!("{}",text);
+    }
+    pub fn print(&mut self, text: String) -> Ret {
+        self.screen
+            .cursor_move(screen::CursorMoveTo::Pos((0, self.screen.posy)))?;
+        print!("{}", text);
         self.screen.posy += 1;
-        let (_column,_line) = crossterm::terminal::size()?;
+        let (_column, _line) = crossterm::terminal::size()?;
         if self.screen.posy == _line {
             self.screen.posy = 0;
             self.screen.clear_bg()?;
         }
         self.screen.flush()?;
         Ok(())
-    }  
-    fn tick_once(&mut self) -> RetTick{
+    }
+    fn tick_once(&mut self) -> RetTick {
         self.screen.clear_bg()?;
-        for (_,sys) in &mut self.get_systems_mut().sys{
-            LOG!(Debug,"activating {:?}",sys);
+        for (_, sys) in &mut self.get_systems_mut().sys {
+            LOG!(Debug, "activating {:?}", sys);
             sys.activate(self.get_self_mut())?;
         }
         Ok(true)
     }
-    fn tick_once_last(&mut self) -> RetTick{
+    fn tick_once_last(&mut self) -> RetTick {
         self.rerender_all()?;
         self.is_started = !self.is_started;
         Ok(true)
     }
-    fn tick_enter(&mut self) -> RetTick{
-
-        if !self.is_started{
-            if !self.tick_once()?{
+    fn tick_enter(&mut self) -> RetTick {
+        if !self.is_started {
+            if !self.tick_once()? {
                 return Ok(false);
             }
         };
         let screen = Screen::get_size()?;
-        if screen != self.screen.screen{
+        if screen != self.screen.screen {
             self.set_flag(Flags::Resized);
-            self.get_systems_mut().send_signal(RESIZED, GAME_NAMESPACE,Box::new(self.screen._get_size()?));
+            self.get_systems_mut().send_signal(
+                RESIZED,
+                GAME_NAMESPACE,
+                Box::new(self.screen._get_size()?),
+            );
             self.set_flag(Flags::Rerender);
             // send resized signal
             self.screen.screen = screen;
         }
-        
+
         //self.clear_bg()?;
 
         // handle the signals
@@ -227,56 +242,62 @@ impl<'a> Game<'a> {
         s.deliver_signals(g)?;
         Ok(true)
     }
-    
-    fn tick(&mut self) -> RetTick{
-        if self.input.pressed_keys.contains(&Keys::Esc){
+
+    fn tick(&mut self) -> RetTick {
+        if self.input.pressed_keys.contains(&Keys::Esc) {
             return Ok(false);
         }
 
         let mut res;
         // code that runs before any ticl
         res = self.tick_enter()?;
-        if !res{return Ok(res)}
+        if !res {
+            return Ok(res);
+        }
 
         let g = self.get_self_mut();
         let t = self.get_timing_mut();
         // every physics tics
-        if t.should_physics(){
-            for (name,sys) in &mut self.get_systems_mut().sys{
-                if sys.is_active(){
-                    if !sys.is_init(){
-                        LOG!(Debug,"Activating {:?}",sys);
+        if t.should_physics() {
+            for (name, sys) in &mut self.get_systems_mut().sys {
+                if sys.is_active() {
+                    if !sys.is_init() {
+                        LOG!(Debug, "Activating {:?}", sys);
                         sys.activate(g)?;
                     }
-                    res = sys.fun._physics_loop(t.get_delta_physics(),name,g)?
+                    res = sys.fun._physics_loop(t.get_delta_physics(), name, g)?
                 }
-                if !res {return Ok(res);}
+                if !res {
+                    return Ok(res);
+                }
             }
             t.update_physics_delta();
         }
         // every process tick
         // basicly same for now except timing
-        if t.should_process(){
-            for (name,sys) in &mut self.get_systems_mut().sys{
-                if sys.is_active(){
-                    if !sys.is_init(){
-                        LOG!(Debug,"Activating {:?}",sys);
+        if t.should_process() {
+            for (name, sys) in &mut self.get_systems_mut().sys {
+                if sys.is_active() {
+                    if !sys.is_init() {
+                        LOG!(Debug, "Activating {:?}", sys);
                         sys.activate(g)?;
                     }
-                    res = sys.fun._process_loop(t.get_delta_process(),name,g)?
+                    res = sys.fun._process_loop(t.get_delta_process(), name, g)?
                 }
-                if !res {return Ok(res);}
+                if !res {
+                    return Ok(res);
+                }
             }
             t.update_process_delta();
         }
-     
+
         // rendering
-        if t.should_render(){
+        if t.should_render() {
             self.tick_render()?;
             self.get_timing_mut().update_render_delta();
         };
-        if !self.is_started{
-            if !self.tick_once_last()?{
+        if !self.is_started {
+            if !self.tick_once_last()? {
                 return Ok(false);
             }
         };
@@ -285,102 +306,98 @@ impl<'a> Game<'a> {
         Ok(true)
     }
 
-
-
-    fn tick_render(&mut self) -> RetTick{            
+    fn tick_render(&mut self) -> RetTick {
         // change the debug flag
-        if self.has_flag(Flags::Debug){
-            if self.has_flag(Flags::Custom("d".to_string())){
+        if self.has_flag(Flags::Debug) {
+            if self.has_flag(Flags::Custom("d".to_string())) {
                 self.screen.print_title(None)?;
                 self.unset_flag(Flags::Custom("d".to_string()));
-            }else {
+            } else {
                 let fps = 1.0 / self.timing.get_delta_render().as_secs_f32();
-                self.screen.print_title(Some(format!(" fps:{:.1}  press {:?} screen {:?}",fps,self.input.pressed_keys,self.screen.screen)))?;
+                self.screen.print_title(Some(format!(
+                    " fps:{:.1}  press {:?} screen {:?}",
+                    fps, self.input.pressed_keys, self.screen.screen
+                )))?;
                 self.set_flag(Flags::Custom("d".to_string()));
             }
             self.unset_flag(Flags::Debug);
-        }else if self.has_flag(Flags::Custom("d".to_string())){
-                let fps = 1.0 / self.timing.get_delta_render().as_secs_f32();
-                self.screen.print_title(Some(format!(" fps:{:.1}  press {:?} screen {:?}",fps,self.input.pressed_keys,self.screen.screen)))?;
-                self.set_flag(Flags::Custom("d".to_string()));
-
+        } else if self.has_flag(Flags::Custom("d".to_string())) {
+            let fps = 1.0 / self.timing.get_delta_render().as_secs_f32();
+            self.screen.print_title(Some(format!(
+                " fps:{:.1}  press {:?} screen {:?}",
+                fps, self.input.pressed_keys, self.screen.screen
+            )))?;
+            self.set_flag(Flags::Custom("d".to_string()));
         }
-        
 
-
-        if self.has_flag(Flags::Rerender) || self.has_flag(Flags::ForceRerender){
+        if self.has_flag(Flags::Rerender) || self.has_flag(Flags::ForceRerender) {
             self.rerender_all()?;
             self.unset_flag(Flags::Rerender);
             self.unset_flag(Flags::ForceRerender);
-        }else{
-
-
-            for x in &mut self.get_wolrd_mut().objects{
+        } else {
+            for x in &mut self.get_wolrd_mut().objects {
                 let mut scr = self.get_screen_mut();
                 scr.reset_color()?;
-            
-                if self.has_flag(Flags::Resized){
+
+                if self.has_flag(Flags::Resized) {
                     self.set_flag(Flags::Rerender);
-                }else {
+                } else {
                     match x.should_render() {
-                        crate::gameobject::ShouldRender::ForceRerender |
-                        crate::gameobject::ShouldRender::Changed  => {
+                        crate::gameobject::ShouldRender::ForceRerender
+                        | crate::gameobject::ShouldRender::Changed => {
                             scr.reset_color()?;
                             x.clearself(&mut scr)?;
                             x.print(&mut scr)?;
-
-                        },
+                        }
                         crate::gameobject::ShouldRender::Unchanged => (),
-                        crate::gameobject::ShouldRender::Disabled |
-                        crate::gameobject::ShouldRender::Clear => {
+                        crate::gameobject::ShouldRender::Disabled
+                        | crate::gameobject::ShouldRender::Clear => {
                             scr.reset_color()?;
                             x.clearself(&mut scr)?;
-
-                        },
+                        }
                     };
                 }
             }
         }
         self.screen.out.flush()?;
-        
+
         Ok(true)
     }
 
-    pub fn main_loop(&mut self) -> Ret{
+    pub fn main_loop(&mut self) -> Ret {
         loop {
-
             self.input.poll_keys()?;
             self.organize_flags();
             let r = self.tick()?;
-            if !r {break};
-
+            if !r {
+                break;
+            };
         }
         Ok(())
     }
-    pub(crate) fn organize_flags(&mut self){
-        if self.input.just_pressed_keys.contains(&Keys::Debug){
+    pub(crate) fn organize_flags(&mut self) {
+        if self.input.just_pressed_keys.contains(&Keys::Debug) {
             self.set_flag(Flags::Debug);
         }
-        if self.input.just_pressed_keys.contains(&Keys::Refresh){
+        if self.input.just_pressed_keys.contains(&Keys::Refresh) {
             self.set_flag(Flags::Rerender);
         }
     }
-    fn rerender_all(&mut self) -> Ret{
+    fn rerender_all(&mut self) -> Ret {
         let mut screen = self.get_screen_mut();
         screen.clear_bg()?;
-        for x in &mut self.get_wolrd_mut().objects{
+        for x in &mut self.get_wolrd_mut().objects {
             //x.clearself(&mut self.terminal.out)?;
             match x.should_render() {
-                crate::gameobject::ShouldRender::ForceRerender |
-                crate::gameobject::ShouldRender::Unchanged |
-                crate::gameobject::ShouldRender::Changed => {
+                crate::gameobject::ShouldRender::ForceRerender
+                | crate::gameobject::ShouldRender::Unchanged
+                | crate::gameobject::ShouldRender::Changed => {
                     x.print(&mut screen)?;
-                },
-                crate::gameobject::ShouldRender::Clear |
-                crate::gameobject::ShouldRender::Disabled => {
+                }
+                crate::gameobject::ShouldRender::Clear
+                | crate::gameobject::ShouldRender::Disabled => {
                     x.clearself(&mut screen)?;
-                },
-
+                }
             };
         }
         screen.flush()?;
@@ -388,25 +405,26 @@ impl<'a> Game<'a> {
     }
 }
 
-
 impl<'a> Drop for Game<'a> {
     fn drop(&mut self) {
         self.exit().unwrap();
-        
+
         if std::thread::panicking() {
             eprintln!("game crashed lol");
             let plogs = self.panic_logs.lock().unwrap();
-            for x in plogs.iter(){
-                eprintln!("{}",x)
-            };
-            let bt = Backtrace::capture();
-            match bt.status(){
-                std::backtrace::BacktraceStatus::Captured => {
-                    eprintln!("{}",bt)
-                },
-                _ =>  eprintln!("note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"),
+            for x in plogs.iter() {
+                eprintln!("{}", x)
             }
-        }else {
+            let bt = Backtrace::capture();
+            match bt.status() {
+                std::backtrace::BacktraceStatus::Captured => {
+                    eprintln!("{}", bt)
+                }
+                _ => eprintln!(
+                    "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+                ),
+            }
+        } else {
             println!("game exited")
         }
         println!("start log");
@@ -415,19 +433,26 @@ impl<'a> Drop for Game<'a> {
         if let Some(path) = &logs.log_path {
             let mut tries = 0;
             loop {
-                let num ={if tries == 0 {"".to_string()} else {format!(".{}",tries)}};
-                let pathname = format!("{}{}.log",path,num);
+                let num = {
+                    if tries == 0 {
+                        "".to_string()
+                    } else {
+                        format!(".{}", tries)
+                    }
+                };
+                let pathname = format!("{}{}.log", path, num);
                 let p = std::path::Path::new(&pathname);
-                if p.exists(){
+                if p.exists() {
                     tries += 1;
                     continue;
-                }else {
+                } else {
                     let mut file = OpenOptions::new()
-                        .create(true)   // create if not exists
-                        .append(true)   // open for appending
-                        .open(p).unwrap(); 
+                        .create(true) // create if not exists
+                        .append(true) // open for appending
+                        .open(p)
+                        .unwrap();
 
-                    for x in logs.logs.iter(){
+                    for x in logs.logs.iter() {
                         let clean = strip_ansi_escapes::strip_str(x);
                         file.write_all(clean.as_bytes()).unwrap();
                         file.write(&[b'\n']).unwrap();
@@ -437,9 +462,97 @@ impl<'a> Drop for Game<'a> {
             }
         }
 
-        for x in logs.logs.iter(){
-            println!("{}",x)
+        for x in logs.logs.iter() {
+            println!("{}", x)
         }
         println!("end log")
+    }
+}
+
+use pyo3::prelude::*;
+
+#[pyclass(name = "Engine", module = "termrender", unsendable)]
+pub struct PyEngine {
+    inner: Game<'static>,
+}
+
+#[pymethods]
+impl PyEngine {
+    #[new]
+    #[pyo3(signature = (title="Termrender PyO3".to_string(), physics=60.0, process=60.0, render=60.0))]
+    pub fn new(title: String, physics: f32, process: f32, render: f32) -> Self {
+        PyEngine {
+            inner: Game::new(title, physics, process, render),
+        }
+    }
+
+    pub fn get_width(&self) -> u16 {
+        self.inner.screen.screen.x as u16
+    }
+
+    pub fn set_width(&mut self, val: u16) {
+        self.inner.screen.screen.x = val as i32;
+    }
+
+    pub fn get_height(&self) -> u16 {
+        self.inner.screen.screen.y as u16
+    }
+
+    pub fn set_height(&mut self, val: u16) {
+        self.inner.screen.screen.y = val as i32;
+    }
+
+    pub fn clear_screen(&mut self) -> PyResult<()> {
+        let _ = self.inner.screen.clear_bg();
+        Ok(())
+    }
+
+    pub fn setup_terminal(&mut self) -> PyResult<()> {
+        let _ = self.inner.setup();
+        Ok(())
+    }
+
+    pub fn teardown_terminal(&mut self) -> PyResult<()> {
+        let _ = self.inner.exit();
+        Ok(())
+    }
+
+    pub fn print_at(&mut self, text: String) -> PyResult<()> {
+        let _ = self.inner.print(text);
+        Ok(())
+    }
+
+    pub fn render(&mut self) -> PyResult<()> {
+        let _ = self.inner.tick_render();
+        let _ = self.inner.screen.out.flush();
+        Ok(())
+    }
+
+    pub fn poll_events(&mut self) -> PyResult<()> {
+        let _ = self.inner.input.poll_keys();
+        self.inner.organize_flags();
+        let _ = self.inner.tick();
+        Ok(())
+    }
+
+    pub fn spawn_object(
+        &mut self,
+        x: i32,
+        y: i32,
+        tag: String,
+        texture: crate::print::PyGameTexture,
+    ) -> PyResult<usize> {
+        let b = crate::gameobject::ObjectBuilder::new()
+            .with_attribute(crate::components::Attribute::Location(Vec2::new(x, y)))
+            .with_attribute(crate::components::Attribute::Tag(tag))
+            .with_attribute(crate::components::Attribute::Texture(texture.inner))
+            .build();
+
+        let id = self.inner.world.insert_object_head(b)?;
+        Ok(id)
+    }
+
+    pub fn get_api(&mut self) -> PyResult<py_api::PyGameApi> {
+        Ok(py_api::PyGameApi::new(&mut self.inner))
     }
 }

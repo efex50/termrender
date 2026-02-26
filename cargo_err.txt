@@ -1,0 +1,67 @@
+﻿cargo :    Compiling p
+yo3-ffi v0.20.3
+At line:1 char:1
++ cargo check 2>&1 | O
+ut-File -Encoding utf8
+ cargo_err.txt; type c
+argo_ ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (   Compili   
+ ng pyo3-ffi v0.20    
+.3:String) [], Re    m
+oteException
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+error: failed to run c
+ustom build command fo
+r `pyo3-ffi v0.20.3`
+
+Caused by:
+  process didn't exit 
+successfully: `C:\User
+s\efe\Projeler\termren
+der\target\debug\build
+\pyo3-ffi-4340518effec
+adcf\build-script-buil
+d` (exit code: 1)
+  --- stdout
+  cargo:rerun-if-env-c
+hanged=PYO3_CROSS
+  cargo:rerun-if-env-c
+hanged=PYO3_CROSS_LIB_
+DIR
+  cargo:rerun-if-env-c
+hanged=PYO3_CROSS_PYTH
+ON_VERSION
+  cargo:rerun-if-env-c
+hanged=PYO3_CROSS_PYTH
+ON_IMPLEMENTATION
+  cargo:rerun-if-env-c
+hanged=PYO3_PRINT_CONF
+IG
+  cargo:rerun-if-env-c
+hanged=PYO3_USE_ABI3_F
+ORWARD_COMPATIBILITY
+
+  --- stderr
+  error: the configure
+d Python interpreter v
+ersion (3.14) is newer
+ than PyO3's maximum s
+upported version (3.12
+)
+  = help: please check
+ if an updated version
+ of PyO3 is available.
+ Current version: 0.20
+.3
+  = help: set PYO3_USE
+_ABI3_FORWARD_COMPATIB
+ILITY=1 to suppress th
+is check and build any
+way using the stable A
+BI
